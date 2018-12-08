@@ -272,8 +272,17 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         target = target.cuda(args.gpu, non_blocking=True)
 
         # compute output
-        output = model(input)
-        loss = criterion(output, target)
+
+        if args.arch.startswith('googlenet'):
+            aux1, aux2, output = model(input)
+            loss1 = criterion(output, target)
+            loss2 = criterion(aux1, target)
+            loss3 = criterion(aux2, target)
+
+            loss = loss1 + 0.3 * (loss2 + loss3)
+        else:
+            output = model(input)
+            loss = criterion(output, target)
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
