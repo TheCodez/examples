@@ -23,6 +23,12 @@ The default learning rate schedule starts at 0.1 and decays by a factor of 10 ev
 python main.py -a alexnet --lr 0.01 [imagenet-folder with train and val folders]
 ```
 
+### GoogLeNet
+```bash
+python main.py -a googlenet --lr 0.01 --wd 0.0002 [imagenet-folder with train and val folders]
+```
+
+
 ## Multi-processing Distributed Data Parallel Training
 
 You should always use the NCCL backend for multi-processing distributed training since it currently provides the best distributed training performance.
