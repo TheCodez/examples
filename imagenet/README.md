@@ -17,6 +17,12 @@ To train a model, run `main.py` with the desired model architecture and the path
 python main.py -a resnet18 [imagenet-folder with train and val folders]
 ```
 
+### GoogLeNet
+```bash
+python main.py -a googlenet --lr 0.01 --wd 0.0002 [imagenet-folder with train and val folders]
+```
+
+
 The default learning rate schedule starts at 0.1 and decays by a factor of 10 every 30 epochs. This is appropriate for ResNet and models with batch normalization, but too high for AlexNet and VGG. Use 0.01 as the initial learning rate for AlexNet or VGG:
 
 ```bash
