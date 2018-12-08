@@ -381,7 +381,7 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs.
-    In the case of the GoogLeNet it is decreased by 4% every 8 epcohs"""
+    In the case of the GoogLeNet it is decreased by 4% every 8 epochs"""
     if args.arch.startswith('googlenet'):
         lr = args.lr * (0.96 ** (epoch // 8))
     else:
