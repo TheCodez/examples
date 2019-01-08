@@ -19,6 +19,28 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
+
+# from https://github.com/fastai/imagenet-fast/blob/master/imagenet_nv/fastai_imagenet.py
+class Lighting(object):
+    """Lighting noise(AlexNet - style PCA - based noise)"""
+
+    def __init__(self, alphastd, eigval, eigvec):
+        self.alphastd = alphastd
+        self.eigval = eigval
+        self.eigvec = eigvec
+
+    def __call__(self, img):
+        if self.alphastd == 0:
+            return img
+
+        alpha = img.new().resize_(3).normal_(0, self.alphastd)
+        rgb = self.eigvec.type_as(img).clone() \
+            .mul(alpha.view(1, 3).expand(3, 3)) \
+            .mul(self.eigval.view(1, 3).expand(3, 3)) \
+            .sum(1).squeeze()
+        return img.add(rgb.view(3, 1, 1).expand_as(img))
+
+
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
@@ -194,14 +216,32 @@ def main_worker(gpu, ngpus_per_node, args):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    train_dataset = datasets.ImageFolder(
-        traindir,
-        transforms.Compose([
+    eigval = torch.Tensor([0.2175, 0.0188, 0.0045])
+    eigvec = torch.Tensor([
+        [-0.5675, 0.7192, 0.4009],
+        [-0.5808, -0.0045, -0.8140],
+        [-0.5836, -0.6948, 0.4203],
+    ])
+
+    if args.arch.startswith('googlenet'):
+        factor = 0.5 if args.arch == 'googlenet_bn' else 1
+        transform = transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(0.4 * factor, 0.4 * factor, 0.4 * factor),
+            transforms.ToTensor(),
+            Lighting(0.1 * factor, eigval, eigvec),
+            normalize,
+        ])
+    else:
+        transform = transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
-        ]))
+        ])
+
+    train_dataset = datasets.ImageFolder(traindir, transform)
 
     if args.distributed:
         train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -229,7 +269,9 @@ def main_worker(gpu, ngpus_per_node, args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        adjust_learning_rate(optimizer, epoch, args)
+
+        if args.arch != 'googlenet':
+            adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
@@ -269,7 +311,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
 
         if args.gpu is not None:
             input = input.cuda(args.gpu, non_blocking=True)
-        target = target.cuda(args.gpu, non_blocking=True)
+            target = target.cuda(args.gpu, non_blocking=True)
+
+        if args.arch == 'googlenet':
+            iter = len(train_loader) * epoch + i
+            max_iter = 40000 * args.epochs
+            poly_lr_scheduler(optimizer, args.lr, iter, max_iter=max_iter, power=0.5)
 
         # compute output
 
@@ -279,7 +326,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             loss2 = criterion(aux1, target)
             loss3 = criterion(aux2, target)
 
-            loss = loss1 + 0.3 * (loss2 + loss3)
+            loss = loss1 + 0.3 * loss2 + 0.3 * loss3
         else:
             output = model(input)
             loss = criterion(output, target)
@@ -324,7 +371,7 @@ def validate(val_loader, model, criterion, args):
         for i, (input, target) in enumerate(val_loader):
             if args.gpu is not None:
                 input = input.cuda(args.gpu, non_blocking=True)
-            target = target.cuda(args.gpu, non_blocking=True)
+                target = target.cuda(args.gpu, non_blocking=True)
 
             # compute output
             output = model(input)
@@ -383,6 +430,16 @@ def adjust_learning_rate(optimizer, epoch, args):
     """Sets the learning rate to the initial LR decayed by a factor of 10 every 30 epochs."""
     lr = args.lr * (0.1 ** (epoch // 30))
 
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+
+
+def poly_lr_scheduler(optimizer, init_lr, iter, max_iter=100, power=0.5):
+
+    if iter >= max_iter:
+        return
+
+    lr = init_lr * (1 - iter / max_iter) ** power
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
