@@ -270,8 +270,7 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.distributed:
             train_sampler.set_epoch(epoch)
 
-        if args.arch != 'googlenet':
-            adjust_learning_rate(optimizer, epoch, args)
+        adjust_learning_rate(optimizer, epoch, args)
 
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch, args)
@@ -312,11 +311,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         if args.gpu is not None:
             input = input.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
-
-        if args.arch == 'googlenet':
-            iter = len(train_loader) * epoch + i
-            max_iter = 40000 * args.epochs
-            poly_lr_scheduler(optimizer, args.lr, iter, max_iter=max_iter, power=0.5)
 
         # compute output
 
@@ -428,18 +422,12 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch, args):
     """Sets the learning rate to the initial LR decayed by a factor of 10 every 30 epochs."""
-    lr = args.lr * (0.1 ** (epoch // 30))
+    if args.arch.startswith('googlenet'):
+        power = 0.9 if args.arch == 'googlenet_bn' else 0.5
+        lr = args.lr * (1 - epoch / float(args.epochs)) ** power
+    else:
+        lr = args.lr * (0.1 ** (epoch // 30))
 
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
-
-def poly_lr_scheduler(optimizer, init_lr, iter, max_iter=100, power=0.5):
-
-    if iter >= max_iter:
-        return
-
-    lr = init_lr * (1 - iter / max_iter) ** power
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
