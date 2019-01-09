@@ -30,7 +30,7 @@ python main.py -a googlenet --lr 0.01 --wd 0.0002 [imagenet-folder with train an
 
 ### BN-GoogLeNet
 ```bash
-python main.py -a googlenet_bn --lr 0.045 --wd 0.0002 [imagenet-folder with train and val folders]
+python main.py -a googlenet_bn --lr 0.045 --wd 0.00004 [imagenet-folder with train and val folders]
 ```
 
 ## Multi-processing Distributed Data Parallel Training
